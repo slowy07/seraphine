@@ -4,14 +4,12 @@ import numpy as np
 import random
 from keras.models import Sequential
 from keras.layers.core import Dense, Activation, Dropout
-from keras.optimizers import RMSprop
-
-EPISODE_DURATION = 200
+from keras.optimizers import Adam
 
 
 def train(environment, model, config):
     replay = []
-    epsilon = config["epsilon"]
+    epsilon = config["epsilon"][0]
     max_duration = 0
     for episode in range(config["episode"]):
         state = environment.reset()
@@ -23,10 +21,9 @@ def train(environment, model, config):
             action, epsilon = pick_action(state, model, epsilon, config)
             prev_state = state
             state, reward, done, info = environment.step(action)
-            terminal = done and not (duration == EPISODE_DURATION)
 
             store_experience(
-                replay, (prev_state, action, reward, state, terminal), config["memory"]
+                replay, (prev_state, action, reward, state, done), config["memory"]
             )
             minibatch = sample_replay_memory(replay, config["batchSize"])
 
@@ -49,7 +46,8 @@ def train(environment, model, config):
 
 
 def pick_action(state, model, epsilon, config):
-    epsilon -= epsilon / config["tau"]
+    if epsilon > config["epsilon"][1]:
+        epsilon -= (config["epsilon"][0] - config["epsilon"][1]) / config["tau"]
     if random.random() < epsilon:
         action = np.random.randint(config["numActions"])
     else:
@@ -110,8 +108,8 @@ def build_neural_net(layers):
     model.add(Dense(layers[-1], init="lecun_uniform"))
     model.add(Activation("linear"))
 
-    rms = RMSprop()
-    model.compile(loss="mse", optimizers=rms)
+    optim = Adam(lr=5e-4)
+    model.compile(loss="mse", optimizers=optim)
     return model
 
 
@@ -123,13 +121,13 @@ if __name__ == "__main__":
     config = {
         "numStates": num_states,
         "numActions": num_actions,
-        "neuralNet": [num_states, 100, 100, num_actions],
-        "memory": 10000,
-        "batchSize": 200,
-        "episodes": 150,
-        "gamma": 0.9,
-        "epsilon": 0.5,
-        "tau": 500,
+        "neuralNet": [num_states, 64, num_actions],
+        "memory": 50000,
+        "batchSize": 32,
+        "episodes": 300,
+        "gamma": 0.99,
+        "epsilon": [1.0, 0.02],
+        "tau": 3000,
     }
 
     model = build_neural_net(config["neuralNet"])
